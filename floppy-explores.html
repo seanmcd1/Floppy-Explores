@@ -228,24 +228,33 @@ function generateLevel(biomeIdx) {
   }
 
   for (let i = 0; i < 15 + biomeIdx * 5; i++) {
-    const cx = 2 + Math.floor(Math.random() * (width - 4));
-    const cy = 2 + Math.floor(Math.random() * (groundY - 3));
-    carrots.push({ x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2, collected: false, golden: i === 0 });
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const cx = 2 + Math.floor(Math.random() * (width - 4));
+      const cy = 2 + Math.floor(Math.random() * (groundY - 3));
+      const t = getSolid(cx, cy);
+      if (!t || !t.solid) { carrots.push({ x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2, collected: false, golden: i === 0 }); break; }
+    }
   }
 
   const matTypes = ["wood", "vine", "cloth", "leaf"];
   for (let i = 0; i < 3 + biomeIdx * 2; i++) {
-    const mx = 3 + Math.floor(Math.random() * (width - 6));
-    const my = groundY - 1 - Math.floor(Math.random() * 6);
-    materials.push({ x: mx * TILE + TILE / 2, y: my * TILE + TILE / 2, type: matTypes[Math.floor(Math.random() * matTypes.length)], collected: false });
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const mx = 3 + Math.floor(Math.random() * (width - 6));
+      const my = groundY - 1 - Math.floor(Math.random() * 6);
+      const t = getSolid(mx, my);
+      if (!t || !t.solid) { materials.push({ x: mx * TILE + TILE / 2, y: my * TILE + TILE / 2, type: matTypes[Math.floor(Math.random() * matTypes.length)], collected: false }); break; }
+    }
   }
 
   const avail = FURNITURE_ITEMS.filter(f => biomeIdx < 2 ? f.rarity === "common" : biomeIdx < 4 ? f.rarity !== "legendary" : true);
   for (let i = 0; i < 1 + Math.floor(Math.random() * 2); i++) {
     const fi = avail[Math.floor(Math.random() * avail.length)];
-    const fx = 8 + Math.floor(Math.random() * (width - 16));
-    const fy = groundY - 2 - Math.floor(Math.random() * 6);
-    furnitureDrops.push({ ...fi, x: fx * TILE + TILE / 2, y: fy * TILE + TILE / 2, collected: false });
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const fx = 8 + Math.floor(Math.random() * (width - 16));
+      const fy = groundY - 2 - Math.floor(Math.random() * 6);
+      const t = getSolid(fx, fy);
+      if (!t || !t.solid) { furnitureDrops.push({ ...fi, x: fx * TILE + TILE / 2, y: fy * TILE + TILE / 2, collected: false }); break; }
+    }
   }
 
   if (biomeIdx >= 1)
