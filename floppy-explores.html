@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Floppy Explores</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;overflow:hidden}
+#root{width:100%;height:100vh}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+
+const TILE = 40;
+const GRAVITY = 0.6;
+const JUMP_FORCE = -12;
+const MOVE_SPEED = 4;
+const CLIMB_SPEED = 3;
+const COYOTE_TIME = 6;
+const JUMP_BUFFER = 8;
+const FLAP_FORCE = -5.5;
+
+const BIOMES = [
+  { name: "Meadow Start", bg: "#b8e6b8", ground: "#5a8f3c", trees: "#3d6b2e", sky: "#d4eeff", desc: "Tutorial meadow" },
+  { name: "Deep Woods", bg: "#4a7a3a", ground: "#3d5c2a", trees: "#2a4a1e", sky: "#a8c8e8", desc: "Vertical focus" },
+  { name: "Canopy Run", bg: "#6aaa4a", ground: "#4a7a32", trees: "#2d5a1a", sky: "#88b8d8", desc: "Advanced climbing" },
+  { name: "Creekside", bg: "#5a9a6a", ground: "#3a6a4a", trees: "#2a5a3a", sky: "#7ab8d8", desc: "Water hazards" },
+  { name: "Night Glade", bg: "#1a2a3a", ground: "#2a3a2a", trees: "#1a2a1a", sky: "#1a2040", desc: "Stealthy hazards" },
+];
+
+const OUTFITS = [
+  { id: "default", name: "Classic Floppy", body: "#f5f0eb", belly: "#fff8f0", ears: "#ffccc8", hat: null, accessory: null, price: 0 },
+  { id: "explorer", name: "Explorer", body: "#f5f0eb", belly: "#fff8f0", ears: "#ffccc8", hat: "safari", accessory: null, price: 10 },
+  { id: "pirate", name: "Pirate Bunny", body: "#f5f0eb", belly: "#fff8f0", ears: "#ffccc8", hat: "pirate", accessory: "eyepatch", price: 20 },
+  { id: "knight", name: "Knight Bunny", body: "#d0d0d8", belly: "#e0e0e8", ears: "#c0b8b0", hat: "helmet", accessory: null, price: 30 },
+  { id: "wizard", name: "Wizard Bunny", body: "#e8e0f0", belly: "#f0e8ff", ears: "#d8c0e8", hat: "wizard", accessory: "wand", price: 25 },
+  { id: "ninja", name: "Ninja Bunny", body: "#2a2a2a", belly: "#3a3a3a", ears: "#222", hat: "headband", accessory: null, price: 35 },
+  { id: "chef", name: "Chef Bunny", body: "#f5f0eb", belly: "#fff8f0", ears: "#ffccc8", hat: "chef", accessory: "apron", price: 15 },
+  { id: "punk", name: "Punk Bunny", body: "#f0e0e8", belly: "#ffe8f0", ears: "#ff88aa", hat: "mohawk", accessory: null, price: 25 },
+];
+
+const FURNITURE_ITEMS = [
+  { id: "bunkbed", name: "Bunk Bed", emoji: "\u{1F6CF}\uFE0F", w: 3, h: 3, color: "#8B6914", rarity: "common" },
+  { id: "bookshelf", name: "Bookshelf", emoji: "\u{1F4DA}", w: 2, h: 3, color: "#6B4914", rarity: "common" },
+  { id: "lamp", name: "Mushroom Lamp", emoji: "\u{1F344}", w: 1, h: 2, color: "#cc4444", rarity: "common" },
+  { id: "rug", name: "Cozy Rug", emoji: "\u{1F7E4}", w: 3, h: 1, color: "#aa7744", rarity: "common" },
+  { id: "plant", name: "Potted Fern", emoji: "\u{1FAB4}", w: 1, h: 2, color: "#44aa44", rarity: "common" },
+  { id: "fireplace", name: "Fireplace", emoji: "\u{1F525}", w: 3, h: 3, color: "#884422", rarity: "rare" },
+  { id: "piano", name: "Tiny Piano", emoji: "\u{1F3B9}", w: 3, h: 2, color: "#222", rarity: "rare" },
+  { id: "telescope", name: "Telescope", emoji: "\u{1F52D}", w: 1, h: 3, color: "#8888aa", rarity: "rare" },
+  { id: "aquarium", name: "Fish Tank", emoji: "\u{1F41F}", w: 2, h: 2, color: "#4488cc", rarity: "rare" },
+  { id: "throne", name: "Carrot Throne", emoji: "\u{1F451}", w: 2, h: 3, color: "#ffaa00", rarity: "legendary" },
+  { id: "chandelier", name: "Crystal Light", emoji: "\u2728", w: 3, h: 2, color: "#aaccff", rarity: "legendary" },
+  { id: "hammock", name: "Cloud Hammock", emoji: "\u2601\uFE0F", w: 3, h: 2, color: "#ddeeff", rarity: "legendary" },
+];
+
+const LEGO_PIECES = {
+  foundation: [
+    { type: "floor", x: 0, y: 7, w: 8, h: 1, color: "#8B7355" },
+    { type: "post", x: 0, y: 6, w: 1, h: 1, color: "#8B7355" },
+    { type: "post", x: 7, y: 6, w: 1, h: 1, color: "#8B7355" },
+  ],
+  walls: [
+    { type: "left wall", x: 0, y: 3, w: 1, h: 3, color: "#D2B48C" },
+    { type: "right wall", x: 7, y: 3, w: 1, h: 3, color: "#D2B48C" },
+    { type: "window", x: 2, y: 4, w: 2, h: 2, color: "#88ccff" },
+    { type: "door", x: 5, y: 5, w: 2, h: 2, color: "#6B4226" },
+  ],
+  roof: [
+    { type: "eave", x: 0, y: 2, w: 8, h: 1, color: "#cc4444" },
+    { type: "mid roof", x: 1, y: 1, w: 6, h: 1, color: "#bb3333" },
+    { type: "top roof", x: 2, y: 0, w: 4, h: 1, color: "#aa2222" },
+  ],
+  cottage: [
+    { type: "porch L", x: 1, y: 5, w: 2, h: 2, color: "#C4A882" },
+    { type: "porch R", x: 5, y: 5, w: 2, h: 2, color: "#C4A882" },
+    { type: "chimney", x: 6, y: -1, w: 1, h: 2, color: "#885544" },
+  ],
+  treehouse: [
+    { type: "trunk", x: 3, y: 6, w: 2, h: 3, color: "#6B4914" },
+    { type: "platform", x: 0, y: 5, w: 8, h: 1, color: "#8B6914" },
+    { type: "rail L", x: 0, y: 4, w: 1, h: 1, color: "#8B6914" },
+    { type: "rail R", x: 7, y: 4, w: 1, h: 1, color: "#8B6914" },
+    { type: "canopy", x: 1, y: -1, w: 6, h: 2, color: "#44aa44" },
+  ],
+};
+
+// === Music System ===
+let musicStarted = false;
+let synth = null;
+let bassSynth = null;
+let melodyLoop = null;
+let bassLoop = null;
+
+const MELODY_BY_BIOME = [
+  ["C5","E5","G5","A5","G5","E5","D5","C5","E5","G5","A5","B5","A5","G5","E5","D5"],
+  ["A4","C5","E5","A5","G5","E5","C5","A4","D5","F5","A5","G5","F5","D5","C5","A4"],
+  ["E5","G5","B5","E6","D6","B5","A5","G5","E5","G5","A5","B5","D6","B5","G5","E5"],
+  ["D5","F5","A5","D6","C6","A5","F5","D5","G5","Bb5","D6","C6","Bb5","G5","F5","D5"],
+  ["A4","C5","D5","E5","G5","E5","D5","C5","A4","G4","A4","C5","D5","E5","D5","C5"],
+];
+
+const BASS_BY_BIOME = [
+  ["C3","C3","G3","G3","A3","A3","F3","F3"],
+  ["A2","A2","F3","F3","D3","D3","E3","E3"],
+  ["E3","E3","G3","G3","A3","A3","B3","B3"],
+  ["D3","D3","F3","F3","G3","G3","Bb3","Bb3"],
+  ["A2","A2","C3","C3","D3","D3","E3","E3"],
+];
+
+function initMusic() {
+  if (musicStarted) return;
+  musicStarted = true;
+  synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.05, decay: 0.3, sustain: 0.2, release: 0.8 },
+    volume: -14,
+  }).toDestination();
+  bassSynth = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.1, decay: 0.4, sustain: 0.6, release: 1.0 },
+    volume: -18,
+  }).toDestination();
+}
+
+function startBiomeMusic(idx) {
+  if (!musicStarted) return;
+  stopMusic();
+  const melody = MELODY_BY_BIOME[idx] || MELODY_BY_BIOME[0];
+  const bass = BASS_BY_BIOME[idx] || BASS_BY_BIOME[0];
+  Tone.getTransport().bpm.value = [100, 90, 110, 95, 80][idx] || 100;
+  let mi = 0;
+  melodyLoop = new Tone.Loop((time) => {
+    synth.triggerAttackRelease(melody[mi % melody.length], "8n", time);
+    mi++;
+  }, "4n").start(0);
+  let bi = 0;
+  bassLoop = new Tone.Loop((time) => {
+    bassSynth.triggerAttackRelease(bass[bi % bass.length], "2n", time);
+    bi++;
+  }, "2n").start(0);
+  Tone.getTransport().start();
+}
+
+function startHubMusic() {
+  if (!musicStarted) return;
+  stopMusic();
+  const hm = ["C5","E5","G5","C6","B5","G5","E5","C5","D5","F5","A5","D6","C6","A5","F5","D5"];
+  const hb = ["C3","C3","G3","G3","F3","F3","G3","G3"];
+  Tone.getTransport().bpm.value = 88;
+  let mi = 0;
+  melodyLoop = new Tone.Loop((time) => { synth.triggerAttackRelease(hm[mi % hm.length], "8n", time); mi++; }, "4n").start(0);
+  let bi = 0;
+  bassLoop = new Tone.Loop((time) => { bassSynth.triggerAttackRelease(hb[bi % hb.length], "2n", time); bi++; }, "2n").start(0);
+  Tone.getTransport().start();
+}
+
+function stopMusic() {
+  Tone.getTransport().stop();
+  if (melodyLoop) { melodyLoop.stop(); melodyLoop.dispose(); melodyLoop = null; }
+  if (bassLoop) { bassLoop.stop(); bassLoop.dispose(); bassLoop = null; }
+}
+
+function playSFX(type) {
+  if (!musicStarted) return;
+  const s = new Tone.Synth({ oscillator: { type: "sine" }, envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 }, volume: -10 }).toDestination();
+  if (type === "carrot") s.triggerAttackRelease("E6", "16n");
+  else if (type === "golden") { s.triggerAttackRelease("C6", "8n"); setTimeout(() => s.triggerAttackRelease("E6", "8n"), 100); setTimeout(() => s.triggerAttackRelease("G6", "8n"), 200); }
+  else if (type === "jump") { s.volume.value = -16; s.triggerAttackRelease("C5", "32n"); }
+  else if (type === "flap") { s.volume.value = -16; s.oscillator.type = "triangle"; s.triggerAttackRelease("E5", "16n"); }
+  else if (type === "hurt") { s.oscillator.type = "sawtooth"; s.volume.value = -12; s.triggerAttackRelease("C3", "8n"); }
+  else if (type === "build") { s.triggerAttackRelease("G5", "8n"); setTimeout(() => s.triggerAttackRelease("B5", "8n"), 120); setTimeout(() => s.triggerAttackRelease("D6", "4n"), 240); }
+  else if (type === "snap") { s.volume.value = -8; s.triggerAttackRelease("A5", "32n"); }
+  else if (type === "material") { s.oscillator.type = "triangle"; s.triggerAttackRelease("D5", "16n"); }
+  setTimeout(() => s.dispose(), 1000);
+}
+
+// === Level Generation ===
+function generateLevel(biomeIdx) {
+  const biome = BIOMES[biomeIdx];
+  const width = 60 + biomeIdx * 10;
+  const height = 20;
+  const tiles = [];
+  const carrots = [];
+  const trees = [];
+  const hazards = [];
+  const materials = [];
+  const furnitureDrops = [];
+
+  for (let x = 0; x < width; x++)
+    for (let y = 0; y < height; y++)
+      tiles.push({ x, y, solid: false });
+
+  const getSolid = (x, y) => tiles.find(t => t.x === x && t.y === y);
+  const groundY = height - 3;
+
+  for (let x = 0; x < width; x++)
+    for (let y = groundY; y < height; y++) { const t = getSolid(x, y); if (t) t.solid = true; }
+
+  for (let i = 0; i < 8 + biomeIdx * 4; i++) {
+    const px = 5 + Math.floor(Math.random() * (width - 10));
+    const py = groundY - 3 - Math.floor(Math.random() * 8);
+    for (let x = px; x < px + 2 + Math.floor(Math.random() * 4) && x < width; x++) { const t = getSolid(x, py); if (t) t.solid = true; }
+  }
+
+  if (biomeIdx > 0)
+    for (let i = 0; i < 1 + biomeIdx; i++) {
+      const gx = 8 + Math.floor(Math.random() * (width - 16));
+      for (let x = gx; x < gx + 2 + Math.floor(Math.random() * 2); x++)
+        for (let y = groundY; y < height; y++) { const t = getSolid(x, y); if (t) t.solid = false; }
+    }
+
+  for (let i = 0; i < 5 + biomeIdx * 2; i++) {
+    const tx = 3 + Math.floor(Math.random() * (width - 6));
+    const th = 5 + Math.floor(Math.random() * 4);
+    const gt = getSolid(tx, groundY);
+    if (gt && gt.solid) trees.push({ x: tx, baseY: groundY, height: th });
+  }
+
+  for (let i = 0; i < 15 + biomeIdx * 5; i++) {
+    const cx = 2 + Math.floor(Math.random() * (width - 4));
+    const cy = 2 + Math.floor(Math.random() * (groundY - 3));
+    carrots.push({ x: cx * TILE + TILE / 2, y: cy * TILE + TILE / 2, collected: false, golden: i === 0 });
+  }
+
+  const matTypes = ["wood", "vine", "cloth", "leaf"];
+  for (let i = 0; i < 3 + biomeIdx * 2; i++) {
+    const mx = 3 + Math.floor(Math.random() * (width - 6));
+    const my = groundY - 1 - Math.floor(Math.random() * 6);
+    materials.push({ x: mx * TILE + TILE / 2, y: my * TILE + TILE / 2, type: matTypes[Math.floor(Math.random() * matTypes.length)], collected: false });
+  }
+
+  const avail = FURNITURE_ITEMS.filter(f => biomeIdx < 2 ? f.rarity === "common" : biomeIdx < 4 ? f.rarity !== "legendary" : true);
+  for (let i = 0; i < 1 + Math.floor(Math.random() * 2); i++) {
+    const fi = avail[Math.floor(Math.random() * avail.length)];
+    const fx = 8 + Math.floor(Math.random() * (width - 16));
+    const fy = groundY - 2 - Math.floor(Math.random() * 6);
+    furnitureDrops.push({ ...fi, x: fx * TILE + TILE / 2, y: fy * TILE + TILE / 2, collected: false });
+  }
+
+  if (biomeIdx >= 1)
+    for (let i = 0; i < biomeIdx * 2; i++) {
+      const hx = 6 + Math.floor(Math.random() * (width - 12));
+      hazards.push({ x: hx * TILE, y: (groundY - 1) * TILE, type: biomeIdx >= 3 ? "water" : "thorn" });
+    }
+
+  return { tiles, carrots, trees, hazards, materials, furnitureDrops, width, height, groundY, biome, biomeIdx, exitX: (width - 3) * TILE, exitY: (groundY - 2) * TILE };
+}
+
+// === Drawing ===
+function drawBunny(ctx, x, y, facing, frame, climbing, jumping, outfit) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (facing < 0) ctx.scale(-1, 1);
+  const b = climbing ? 0 : Math.sin(frame * 0.15) * 2;
+  const ew = Math.sin(frame * 0.1) * 3;
+
+  ctx.fillStyle = "rgba(0,0,0,0.15)";
+  ctx.beginPath(); ctx.ellipse(0, 16, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = outfit.body;
+  ctx.beginPath(); ctx.ellipse(0, 4 + b, 12, 14, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.lineWidth = 1.5; ctx.stroke();
+
+  if (outfit.accessory === "apron") { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(0, 8 + b, 9, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#ccc"; ctx.lineWidth = 1; ctx.stroke(); }
+
+  ctx.fillStyle = outfit.belly;
+  ctx.beginPath(); ctx.ellipse(0, 8 + b, 8, 9, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = outfit.body;
+  ctx.beginPath(); ctx.ellipse(0, -12 + b, 10, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.lineWidth = 1.5; ctx.stroke();
+
+  const drawEar = (ex, ey, ang) => {
+    ctx.fillStyle = outfit.body; ctx.beginPath(); ctx.ellipse(ex, ey + b, 4, 10, ang, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.stroke();
+    ctx.fillStyle = outfit.ears; ctx.beginPath(); ctx.ellipse(ex, ey + b, 2, 7, ang, 0, Math.PI * 2); ctx.fill();
+  };
+  drawEar(-4 - ew, -28, -0.15);
+  drawEar(4 + ew, -30, 0.15);
+
+  if (outfit.hat === "mohawk") { ctx.fillStyle = "#ff2266"; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.ellipse(-1 + i * 1.5, -34 + b - i, 2, 5 + i, 0, 0, Math.PI * 2); ctx.fill(); } }
+  if (outfit.hat === "headband") { ctx.fillStyle = "#cc2222"; ctx.fillRect(-12, -16 + b, 24, 3); ctx.beginPath(); ctx.moveTo(10, -16 + b); ctx.lineTo(16, -20 + b); ctx.lineTo(14, -14 + b); ctx.fill(); }
+  if (outfit.hat === "safari") { ctx.fillStyle = "#c4a46c"; ctx.beginPath(); ctx.ellipse(0, -20 + b, 14, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#b8954a"; ctx.beginPath(); ctx.ellipse(0, -23 + b, 8, 5, 0, 0, Math.PI * 2); ctx.fill(); }
+  if (outfit.hat === "pirate") { ctx.fillStyle = "#222"; ctx.beginPath(); ctx.moveTo(-12, -18 + b); ctx.lineTo(0, -32 + b); ctx.lineTo(12, -18 + b); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#fff"; ctx.font = "8px sans-serif"; ctx.textAlign = "center"; ctx.fillText("\u2620", 0, -21 + b); }
+  if (outfit.hat === "helmet") { ctx.fillStyle = "#888"; ctx.beginPath(); ctx.arc(0, -16 + b, 12, Math.PI, 0); ctx.fill(); ctx.fillStyle = "#666"; ctx.fillRect(-12, -16 + b, 24, 3); ctx.fillStyle = "#aaa"; ctx.beginPath(); ctx.ellipse(0, -26 + b, 3, 6, 0, 0, Math.PI * 2); ctx.fill(); }
+  if (outfit.hat === "wizard") { ctx.fillStyle = "#6633aa"; ctx.beginPath(); ctx.moveTo(-10, -18 + b); ctx.lineTo(0, -40 + b); ctx.lineTo(10, -18 + b); ctx.closePath(); ctx.fill(); ctx.fillStyle = "#ffdd44"; ctx.font = "7px sans-serif"; ctx.textAlign = "center"; ctx.fillText("\u2605", 0, -24 + b); ctx.fillStyle = "#6633aa"; ctx.beginPath(); ctx.ellipse(0, -18 + b, 12, 3, 0, 0, Math.PI * 2); ctx.fill(); }
+  if (outfit.hat === "chef") { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, -24 + b, 10, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(-5, -22 + b, 6, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(5, -22 + b, 6, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(-8, -18 + b, 16, 4); }
+
+  if (outfit.accessory === "eyepatch") {
+    ctx.fillStyle = "#2a1a0a"; ctx.beginPath(); ctx.ellipse(-4, -14 + b, 2.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(-3, -15 + b, 1, 1.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#222"; ctx.fillRect(1, -17 + b, 8, 7);
+    ctx.strokeStyle = "#333"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(5, -14 + b); ctx.lineTo(10, -22 + b); ctx.stroke();
+  } else {
+    ctx.fillStyle = "#2a1a0a"; ctx.beginPath(); ctx.ellipse(-4, -14 + b, 2.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(-3, -15 + b, 1, 1.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#2a1a0a"; ctx.beginPath(); ctx.ellipse(4, -14 + b, 2.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(5, -15 + b, 1, 1.2, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.fillStyle = "#ffaaaa"; ctx.beginPath(); ctx.ellipse(0, -10 + b, 2.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#c8a0a0"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(-2, -8 + b, 2, 0, Math.PI * 0.8); ctx.stroke();
+  ctx.beginPath(); ctx.arc(2, -8 + b, 2, Math.PI * 0.2, Math.PI); ctx.stroke();
+  ctx.fillStyle = "rgba(255,180,180,0.3)";
+  ctx.beginPath(); ctx.ellipse(-8, -10 + b, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(8, -10 + b, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (outfit.accessory === "wand") { ctx.strokeStyle = "#8B6914"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(10, -2 + b); ctx.lineTo(18, -14 + b); ctx.stroke(); ctx.fillStyle = "#ffdd44"; ctx.font = "10px sans-serif"; ctx.fillText("\u2726", 16, -14 + b); }
+
+  if (!climbing) {
+    const fa = Math.sin(frame * 0.2) * 3;
+    ctx.fillStyle = outfit.body === "#2a2a2a" ? "#1a1a1a" : "#f0e8e0";
+    ctx.beginPath(); ctx.ellipse(-5 + fa, 16, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(5 - fa, 16, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-10, 6 + b, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawCarrot(ctx, x, y, golden, frame) {
+  ctx.save(); ctx.translate(x, y);
+  const bob = Math.sin(frame * 0.08 + x * 0.1) * 3;
+  if (golden) { ctx.shadowColor = "#ffd700"; ctx.shadowBlur = 15 + Math.sin(frame * 0.1) * 5; }
+  ctx.fillStyle = golden ? "#ffd700" : "#ff8833";
+  ctx.beginPath(); ctx.moveTo(0, -8 + bob); ctx.quadraticCurveTo(7, -4 + bob, 4, 10 + bob); ctx.quadraticCurveTo(0, 14 + bob, -4, 10 + bob); ctx.quadraticCurveTo(-7, -4 + bob, 0, -8 + bob); ctx.fill();
+  ctx.strokeStyle = golden ? "#ffaa00" : "#dd6622"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-2, bob); ctx.lineTo(2, bob); ctx.moveTo(-1.5, 4 + bob); ctx.lineTo(1.5, 4 + bob); ctx.stroke();
+  ctx.fillStyle = "#44aa44";
+  ctx.beginPath(); ctx.ellipse(-2, -10 + bob, 2, 5, -0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2, -11 + bob, 2, 5, 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.restore();
+}
+
+function drawTree(ctx, tree, biome, frame) {
+  const bx = tree.x * TILE + TILE / 2, by = tree.baseY * TILE, h = tree.height * TILE;
+  ctx.fillStyle = "#8B6914"; ctx.strokeStyle = "#6B4914"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(bx - 8, by - h, 16, h, 4); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = "#5a3a0a"; ctx.lineWidth = 1;
+  for (let i = 0; i < tree.height; i++) { const ly = by - i * TILE - 10; ctx.beginPath(); ctx.moveTo(bx - 4, ly); ctx.quadraticCurveTo(bx, ly - 3, bx + 4, ly); ctx.stroke(); }
+  ctx.fillStyle = "rgba(255,255,200,0.08)"; ctx.beginPath(); ctx.roundRect(bx - 11, by - h, 22, h, 6); ctx.fill();
+  const sw = Math.sin(frame * 0.02 + tree.x) * 2;
+  for (let i = 2; i >= 0; i--) {
+    ctx.fillStyle = biome.sky === "#1a2040" ? `hsl(${130 + i * 10},30%,${20 + i * 5}%)` : `hsl(${110 + i * 10},55%,${35 + i * 8}%)`;
+    ctx.beginPath(); ctx.ellipse(bx + sw, by - h - 5 + i * 8, 22 + i * 8, (22 + i * 8) * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.strokeStyle = "#7a5a14"; ctx.lineWidth = 3;
+  for (let i = 1; i < tree.height - 1; i += 2) { const by2 = by - i * TILE - TILE / 2, d = i % 2 === 0 ? 1 : -1; ctx.beginPath(); ctx.moveTo(bx, by2); ctx.quadraticCurveTo(bx + d * 15, by2 - 5, bx + d * 25, by2 - 10); ctx.stroke(); }
+}
+
+// === Main Component ===
+function FloppyExplores() {
+  const canvasRef = useRef(null);
+  const gameRef = useRef(null);
+  const keysRef = useRef({});
+  const [screen, setScreen] = useState("title");
+  const [totalCarrots, setTotalCarrots] = useState(0);
+  const [totalMaterials, setTotalMaterials] = useState({ wood: 0, vine: 0, cloth: 0, leaf: 0 });
+  const [houseLevel, setHouseLevel] = useState(0);
+  const [currentBiome, setCurrentBiome] = useState(0);
+  const [levelCarrots, setLevelCarrots] = useState(0);
+  const [levelMax, setLevelMax] = useState(0);
+  const [hearts, setHearts] = useState(3);
+  const [maxHearts, setMaxHearts] = useState(3);
+  const [abilities, setAbilities] = useState({ doubleJump: false, fastClimb: false, gardenBonus: false, branchDash: false });
+  const [showMessage, setShowMessage] = useState(null);
+  const [goldenFound, setGoldenFound] = useState([]);
+  const [currentOutfit, setCurrentOutfit] = useState(0);
+  const [ownedOutfits, setOwnedOutfits] = useState([0]);
+  const [collectedFurniture, setCollectedFurniture] = useState([]);
+  const [placedFurniture, setPlacedFurniture] = useState([]);
+  const [musicOn, setMusicOn] = useState(true);
+  const [flyMode, setFlyMode] = useState(false);
+
+  const HOUSE_UPGRADES = [
+    { name: "Burrow", cost: 0, mats: {}, desc: "A simple hole", benefit: "Home!", emoji: "\u{1F573}\uFE0F" },
+    { name: "Foundation", cost: 15, mats: { wood: 3 }, desc: "Floor and posts", benefit: "+1 Heart", emoji: "\u{1F3D7}\uFE0F" },
+    { name: "Cottage", cost: 30, mats: { wood: 5, cloth: 2 }, desc: "A proper house", benefit: "Double Jump!", emoji: "\u{1F3E0}" },
+    { name: "Workshop", cost: 25, mats: { wood: 3, vine: 2 }, desc: "Crafting corner", benefit: "Fast Climb", emoji: "\u{1F527}" },
+    { name: "Garden", cost: 20, mats: { leaf: 3, vine: 2 }, desc: "Carrot patch", benefit: "+5 Carrots", emoji: "\u{1F331}" },
+    { name: "Treehouse", cost: 50, mats: { wood: 8, vine: 4, cloth: 3 }, desc: "Ultimate home!", benefit: "Dash!", emoji: "\u{1F333}" },
+  ];
+
+  const startLevel = useCallback((biomeIdx) => {
+    const level = generateLevel(biomeIdx);
+    setCurrentBiome(biomeIdx);
+    setLevelCarrots(0);
+    setLevelMax(level.carrots.length);
+    setHearts(maxHearts);
+    setScreen("game");
+    gameRef.current = {
+      level, player: { x: 3 * TILE, y: (level.groundY - 2) * TILE, vx: 0, vy: 0, facing: 1, grounded: false, climbing: false, climbTree: null, coyoteTimer: 0, jumpBuffer: 0, frame: 0, invincible: 0, doubleJumpUsed: false, dashCooldown: 0, flying: false, flapCooldown: 0 },
+      camera: { x: 0, y: 0 }, frame: 0, particles: [], levelComplete: false,
+    };
+    if (musicOn) Tone.start().then(() => { initMusic(); startBiomeMusic(biomeIdx); });
+  }, [maxHearts, musicOn]);
+
+  const addParticle = useCallback((x, y, color, count = 5) => {
+    const g = gameRef.current; if (!g) return;
+    for (let i = 0; i < count; i++) g.particles.push({ x, y, vx: (Math.random() - 0.5) * 6, vy: -Math.random() * 5 - 2, life: 30 + Math.random() * 20, maxLife: 50, color, size: 2 + Math.random() * 3 });
+  }, []);
+
+  useEffect(() => {
+    const h = (e) => { if (e.repeat) return; keysRef.current[e.key] = e.type === "keydown"; if ([" ", "ArrowUp", "ArrowDown"].includes(e.key)) e.preventDefault(); };
+    window.addEventListener("keydown", h); window.addEventListener("keyup", h);
+    return () => { window.removeEventListener("keydown", h); window.removeEventListener("keyup", h); };
+  }, []);
+
+  // === Game Loop ===
+  useEffect(() => {
+    if (screen !== "game") return;
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let raf;
+    const outfit = OUTFITS[currentOutfit];
+
+    const loop = () => {
+      const game = gameRef.current;
+      if (!game || screen !== "game") return;
+      const { level, player } = game;
+      const keys = keysRef.current;
+      const W = canvas.width, H = canvas.height;
+      game.frame++; player.frame++;
+
+      const ml = keys["ArrowLeft"] || keys["a"], mr = keys["ArrowRight"] || keys["d"];
+      const jk = keys[" "] || keys["ArrowUp"] || keys["w"], dk = keys["ArrowDown"] || keys["s"];
+      const fk = keys["f"];
+
+      let nearTree = null;
+      for (const tree of level.trees) {
+        const tx = tree.x * TILE + TILE / 2;
+        if (Math.abs(player.x + 12 - tx) < 20 && player.y > (tree.baseY - tree.height) * TILE - 20 && player.y < tree.baseY * TILE) { nearTree = tree; break; }
+      }
+
+      // Flying
+      if (flyMode) {
+        if (player.flapCooldown > 0) player.flapCooldown--;
+        if (fk && player.flapCooldown <= 0 && !player.climbing) {
+          player.vy = FLAP_FORCE; player.flying = true; player.flapCooldown = 8;
+          addParticle(player.x + 12, player.y + 20, "#ddeeff", 3); playSFX("flap");
+        }
+        if (player.flying && !player.grounded) { player.vy += GRAVITY * 0.55; if (player.vy > 4) player.vy = 4; }
+        if (player.grounded) player.flying = false;
+      }
+
+      if (player.climbing) {
+        const cs = abilities.fastClimb ? CLIMB_SPEED * 1.5 : CLIMB_SPEED;
+        player.vy = 0; player.vx = 0;
+        if (keys["ArrowUp"] || keys["w"]) player.vy = -cs;
+        if (dk) player.vy = cs;
+        if (ml) player.vx = -cs * 0.5; if (mr) player.vx = cs * 0.5;
+        if (jk && (ml || mr)) { player.climbing = false; player.vy = JUMP_FORCE * 0.8; player.vx = ml ? -MOVE_SPEED * 1.5 : MOVE_SPEED * 1.5; player.climbTree = null; playSFX("jump"); }
+        if (player.climbTree) { if (player.y < (player.climbTree.baseY - player.climbTree.height) * TILE - 20 || player.y > player.climbTree.baseY * TILE) { player.climbing = false; player.climbTree = null; } }
+      } else if (!player.flying || !flyMode) {
+        if (ml) { player.vx = -MOVE_SPEED; player.facing = -1; } else if (mr) { player.vx = MOVE_SPEED; player.facing = 1; } else player.vx *= 0.7;
+        if (!player.flying) player.vy += GRAVITY;
+        if (player.vy > 12) player.vy = 12;
+        if (jk && !player._jumpHeld) player.jumpBuffer = JUMP_BUFFER;
+        player._jumpHeld = jk;
+        if (player.grounded) { player.coyoteTimer = COYOTE_TIME; player.doubleJumpUsed = false; } else player.coyoteTimer--;
+        if (player.jumpBuffer > 0) {
+          if (player.coyoteTimer > 0) { player.vy = JUMP_FORCE; player.coyoteTimer = 0; player.jumpBuffer = 0; addParticle(player.x + 12, player.y + 16, "#fff", 3); playSFX("jump"); }
+          else if (abilities.doubleJump && !player.doubleJumpUsed) { player.vy = JUMP_FORCE * 0.85; player.doubleJumpUsed = true; player.jumpBuffer = 0; addParticle(player.x + 12, player.y + 16, "#ffdd88", 5); playSFX("jump"); }
+          player.jumpBuffer--;
+        }
+        if (nearTree && (keys["ArrowUp"] || keys["w"]) && player.grounded) { player.climbing = true; player.climbTree = nearTree; player.vy = 0; player.x = nearTree.x * TILE + TILE / 2 - 12; player.flying = false; }
+        if (abilities.branchDash && keys["Shift"] && player.dashCooldown <= 0) { player.vx = player.facing * MOVE_SPEED * 4; player.vy = -2; player.dashCooldown = 40; addParticle(player.x + 12, player.y + 8, "#88ff88", 8); }
+        if (player.dashCooldown > 0) player.dashCooldown--;
+      } else {
+        if (ml) { player.vx = -MOVE_SPEED; player.facing = -1; } else if (mr) { player.vx = MOVE_SPEED; player.facing = 1; } else player.vx *= 0.85;
+      }
+
+      const nx = player.x + player.vx, ny = player.y + player.vy;
+      player.grounded = false;
+      const pw = 20, ph = 32;
+      const ck = (px, py) => { const t = level.tiles.find(t => t.x === Math.floor(px / TILE) && t.y === Math.floor(py / TILE)); return t && t.solid; };
+      if (!ck(nx, player.y + 4) && !ck(nx + pw, player.y + 4) && !ck(nx, player.y + ph - 2) && !ck(nx + pw, player.y + ph - 2)) player.x = nx; else player.vx = 0;
+      if (player.vy > 0) { if (ck(player.x + 4, ny + ph) || ck(player.x + pw - 4, ny + ph)) { player.y = Math.floor((ny + ph) / TILE) * TILE - ph; player.vy = 0; player.grounded = true; } else player.y = ny; }
+      else { if (ck(player.x + 4, ny) || ck(player.x + pw - 4, ny)) { player.y = Math.floor(ny / TILE) * TILE + TILE; player.vy = 0; } else player.y = ny; }
+      if (player.x < 0) player.x = 0;
+      if (player.x > level.width * TILE - 24) player.x = level.width * TILE - 24;
+      if (player.y < -TILE * 4) { player.y = -TILE * 4; player.vy = 1; }
+      if (player.y > level.height * TILE) { player.x = 3 * TILE; player.y = (level.groundY - 2) * TILE; player.vy = 0; player.flying = false; playSFX("hurt"); setHearts(h => { if (h - 1 <= 0) setScreen("gameover"); return Math.max(0, h - 1); }); }
+      if (player.invincible > 0) player.invincible--;
+
+      for (const c of level.carrots) { if (c.collected) continue; if (Math.hypot((player.x + 12) - c.x, (player.y + 16) - c.y) < 24) { c.collected = true; addParticle(c.x, c.y, c.golden ? "#ffd700" : "#ff8833", 8); playSFX(c.golden ? "golden" : "carrot"); setLevelCarrots(v => v + (c.golden ? 5 : 1)); setTotalCarrots(v => v + (c.golden ? 5 : 1)); if (c.golden) { setGoldenFound(g => [...g, currentBiome]); setShowMessage("\u2728 Golden Carrot! +5"); setTimeout(() => setShowMessage(null), 2000); } } }
+      for (const m of level.materials) { if (m.collected) continue; if (Math.hypot((player.x + 12) - m.x, (player.y + 16) - m.y) < 24) { m.collected = true; addParticle(m.x, m.y, "#88cc88", 5); playSFX("material"); setTotalMaterials(v => ({ ...v, [m.type]: v[m.type] + 1 })); } }
+      for (const fi of level.furnitureDrops) { if (fi.collected) continue; if (Math.hypot((player.x + 12) - fi.x, (player.y + 16) - fi.y) < 28) { fi.collected = true; addParticle(fi.x, fi.y, fi.rarity === "legendary" ? "#ffd700" : "#aa88ff", 10); playSFX("build"); setCollectedFurniture(p => [...p, { ...fi }]); setShowMessage(`${fi.emoji} Found ${fi.name}!`); setTimeout(() => setShowMessage(null), 2500); } }
+      if (player.invincible <= 0) for (const hz of level.hazards) { if (Math.abs((player.x + 12) - (hz.x + 20)) < 28 && Math.abs((player.y + 16) - (hz.y + 20)) < 28) { player.invincible = 60; player.vy = JUMP_FORCE * 0.5; addParticle(player.x + 12, player.y + 16, "#ff4444", 6); playSFX("hurt"); setHearts(h => { if (h - 1 <= 0) setScreen("gameover"); return Math.max(0, h - 1); }); } }
+
+      if (Math.abs((player.x + 12) - level.exitX) < 30 && Math.abs((player.y + 16) - level.exitY) < 40 && !game.levelComplete) {
+        game.levelComplete = true;
+        if (abilities.gardenBonus) setTotalCarrots(c => c + 5);
+        setTimeout(() => { stopMusic(); setScreen("levelcomplete"); }, 500);
+      }
+
+      game.particles = game.particles.filter(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life--; return p.life > 0; });
+      game.camera.x += ((player.x - W / 2 + 12) - game.camera.x) * 0.1;
+      game.camera.y += ((player.y - H / 2) - game.camera.y) * 0.1;
+      game.camera.x = Math.max(0, Math.min(level.width * TILE - W, game.camera.x));
+      game.camera.y = Math.max(0, Math.min(level.height * TILE - H, game.camera.y));
+
+      // RENDER
+      ctx.save();
+      const gr = ctx.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, level.biome.sky); gr.addColorStop(1, level.biome.bg);
+      ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      for (let i = 0; i < 6; i++) { const cx = ((i * 200 + game.frame * 0.2) % (W + 200)) - 100; ctx.beginPath(); ctx.ellipse(cx, 30 + i * 35, 40 + i * 5, 15, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.translate(-game.camera.x, -game.camera.y);
+
+      for (const tree of level.trees) drawTree(ctx, tree, level.biome, game.frame);
+      for (const tile of level.tiles) {
+        if (!tile.solid) continue;
+        const tx = tile.x * TILE, ty = tile.y * TILE;
+        if (tx < game.camera.x - TILE || tx > game.camera.x + W + TILE) continue;
+        const isTop = !level.tiles.find(t => t.x === tile.x && t.y === tile.y - 1 && t.solid);
+        if (isTop) { ctx.fillStyle = "#5aaa3a"; ctx.fillRect(tx, ty, TILE, 6); ctx.fillStyle = level.biome.ground; ctx.fillRect(tx, ty + 6, TILE, TILE - 6); } else { ctx.fillStyle = level.biome.ground; ctx.fillRect(tx, ty, TILE, TILE); }
+        ctx.strokeStyle = "rgba(0,0,0,0.06)"; ctx.strokeRect(tx, ty, TILE, TILE);
+      }
+      for (const hz of level.hazards) { ctx.save(); ctx.translate(hz.x, hz.y); if (hz.type === "thorn") { for (let i = 0; i < 3; i++) { ctx.fillStyle = "#884422"; ctx.beginPath(); ctx.moveTo(i * 14, TILE); ctx.lineTo(i * 14 + 7, TILE - 16); ctx.lineTo(i * 14 + 14, TILE); ctx.fill(); } } else { ctx.fillStyle = "rgba(80,140,220,0.6)"; ctx.beginPath(); ctx.moveTo(0, TILE); for (let i = 0; i <= TILE; i += 5) ctx.lineTo(i, TILE - 8 + Math.sin(i * 0.2 + game.frame * 0.1) * 3); ctx.lineTo(TILE, TILE); ctx.fill(); } ctx.restore(); }
+
+      for (const m of level.materials) { if (m.collected) continue; const bob = Math.sin(game.frame * 0.06 + m.x * 0.05) * 2; ctx.save(); ctx.translate(m.x, m.y + bob); ctx.fillStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill(); ctx.font = "16px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText({ wood: "\u{1FAB5}", vine: "\u{1F33F}", cloth: "\u{1F9F6}", leaf: "\u{1F343}" }[m.type], 0, 0); ctx.restore(); }
+
+      for (const fi of level.furnitureDrops) { if (fi.collected) continue; const bob = Math.sin(game.frame * 0.06 + fi.x * 0.03) * 3; ctx.save(); ctx.translate(fi.x, fi.y + bob); const gl = 8 + Math.sin(game.frame * 0.08) * 4; ctx.shadowColor = fi.rarity === "legendary" ? "#ffd700" : fi.rarity === "rare" ? "#aa88ff" : "#88cc88"; ctx.shadowBlur = gl; ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; ctx.font = "20px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(fi.emoji, 0, 0); ctx.restore(); }
+
+      for (const c of level.carrots) if (!c.collected) drawCarrot(ctx, c.x, c.y, c.golden, game.frame);
+
+      ctx.save(); ctx.translate(level.exitX, level.exitY);
+      ctx.fillStyle = "#886633"; ctx.fillRect(0, -40, 4, 56);
+      ctx.fillStyle = "#ff6644"; ctx.beginPath(); ctx.moveTo(4, -40); ctx.lineTo(30 + Math.sin(game.frame * 0.05) * 5, -30); ctx.lineTo(4, -20); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = "bold 10px sans-serif"; ctx.fillText("EXIT", 8, -28);
+      ctx.restore();
+
+      if (player.invincible <= 0 || game.frame % 4 < 2) {
+        if (player.flying && flyMode) {
+          ctx.save(); ctx.translate(player.x + 12, player.y + 4); if (player.facing < 0) ctx.scale(-1, 1);
+          const fa = Math.sin(game.frame * 0.3) * 0.5;
+          ctx.fillStyle = "rgba(200,220,255,0.5)";
+          ctx.beginPath(); ctx.ellipse(-14, -4, 12, 6, fa - 0.3, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(14, -4, 12, 6, -fa + 0.3, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+        drawBunny(ctx, player.x + 12, player.y + 16, player.facing, player.frame, player.climbing, player.vy < -2, outfit);
+      }
+      for (const p of game.particles) { ctx.globalAlpha = p.life / p.maxLife; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2); ctx.fill(); }
+      ctx.globalAlpha = 1;
+      if (nearTree && !player.climbing) { ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center"; ctx.fillText("\u2191 Climb", player.x + 12, player.y - 20); }
+      ctx.restore();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [screen, addParticle, abilities, currentBiome, maxHearts, currentOutfit, flyMode]);
+
+  const buyUpgrade = (idx) => {
+    const u = HOUSE_UPGRADES[idx];
+    if (totalCarrots < u.cost) return;
+    for (const [m, c] of Object.entries(u.mats)) if ((totalMaterials[m] || 0) < c) return;
+    setTotalCarrots(v => v - u.cost);
+    setTotalMaterials(v => { const n = { ...v }; for (const [m, c] of Object.entries(u.mats)) n[m] -= c; return n; });
+    setHouseLevel(idx);
+    if (idx === 1) setMaxHearts(4);
+    if (idx === 2) setAbilities(a => ({ ...a, doubleJump: true }));
+    if (idx === 3) setAbilities(a => ({ ...a, fastClimb: true }));
+    if (idx === 4) setAbilities(a => ({ ...a, gardenBonus: true }));
+    if (idx === 5) setAbilities(a => ({ ...a, branchDash: true }));
+    playSFX("build");
+  };
+
+  const canAfford = (idx) => { const u = HOUSE_UPGRADES[idx]; if (totalCarrots < u.cost) return false; for (const [m, c] of Object.entries(u.mats)) if ((totalMaterials[m] || 0) < c) return false; return true; };
+
+  const toggleMusic = async () => { if (!musicOn) { setMusicOn(true); await Tone.start(); initMusic(); } else { setMusicOn(false); stopMusic(); } };
+
+  const linkEl = <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet" />;
+  const ff = "'Fredoka','Nunito',sans-serif";
+
+  // === TITLE ===
+  if (screen === "title") return (
+    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg,#d4eeff 0%,#b8e6b8 60%,#5a8f3c 100%)", fontFamily: ff, overflow: "hidden", position: "relative" }}>
+      {linkEl}
+      <style>{`@keyframes hop{0%,100%{transform:translateY(0)}50%{transform:translateY(-15px)}} @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}`}</style>
+      <div style={{ fontSize: 80, animation: "hop 1.5s ease-in-out infinite", marginBottom: -10 }}>{"\u{1F430}"}</div>
+      <h1 style={{ fontSize: 48, color: "#3a5a2a", textShadow: "3px 3px 0 rgba(255,255,255,0.5)", margin: "8px 0", fontWeight: 700 }}>Floppy Explores</h1>
+      <p style={{ fontSize: 15, color: "#5a7a4a", marginBottom: 28, opacity: 0.8 }}>Climb, collect, build & fly!</p>
+      <button onClick={async () => { await Tone.start(); initMusic(); setScreen("hub"); startHubMusic(); }} style={{ padding: "14px 44px", fontSize: 20, fontWeight: 700, fontFamily: "inherit", background: "linear-gradient(135deg,#ff8844,#ff6622)", color: "#fff", border: "none", borderRadius: 50, cursor: "pointer", boxShadow: "0 6px 20px rgba(255,100,30,0.4)", animation: "pulse 2s ease-in-out infinite" }}>
+        {"\u{1F955}"} Start Adventure
+      </button>
+      <div style={{ marginTop: 20, fontSize: 12, color: "#6a8a5a", textAlign: "center", lineHeight: 1.7 }}>
+        Arrow keys / WASD to move {"\u00B7"} Space to jump {"\u00B7"} F to fly{"\u000A"}
+        <br/>Climb trees with Up {"\u00B7"} Shift to dash (unlockable)
+      </div>
+    </div>
+  );
+
+  // === HUB ===
+  if (screen === "hub") {
+    const ch = HOUSE_UPGRADES[houseLevel];
+    const nu = houseLevel < HOUSE_UPGRADES.length - 1 ? HOUSE_UPGRADES[houseLevel + 1] : null;
+    return (
+      <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", background: "linear-gradient(180deg,#eef6ff 0%,#d4eedd 50%,#a8d4a0 100%)", fontFamily: ff, overflow: "hidden" }}>
+        {linkEl}
+        <div style={{ padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0, flexWrap: "wrap", gap: 8 }}>
+          <h2 style={{ margin: 0, color: "#3a5a2a", fontSize: 20 }}>{"\u{1F3E1}"} Floppy's Home</h2>
+          <div style={{ display: "flex", gap: 8, fontSize: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ background: "#fff3e0", padding: "4px 10px", borderRadius: 16, fontWeight: 600, color: "#cc6600" }}>{"\u{1F955}"} {totalCarrots}</span>
+            <span style={{ background: "#e8f5e9", padding: "4px 10px", borderRadius: 16, fontWeight: 600, color: "#4a7a3a" }}>{"\u{1FAB5}"}{totalMaterials.wood} {"\u{1F33F}"}{totalMaterials.vine} {"\u{1F9F6}"}{totalMaterials.cloth} {"\u{1F343}"}{totalMaterials.leaf}</span>
+            <button onClick={toggleMusic} style={{ background: "rgba(255,255,255,0.7)", border: "none", borderRadius: 16, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>{musicOn ? "\u{1F50A}" : "\u{1F507}"}</button>
+            <button onClick={() => setFlyMode(f => !f)} style={{ background: flyMode ? "#ffe0b0" : "rgba(255,255,255,0.7)", border: flyMode ? "2px solid #ffaa33" : "2px solid transparent", borderRadius: 16, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>{flyMode ? "\u{1FABD} Fly ON" : "\u{1FABD} Fly OFF"}</button>
+          </div>
+        </div>
+        <div style={{ display: "flex", flex: 1, gap: 10, padding: "0 16px 12px", minHeight: 0, overflow: "hidden" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, overflow: "auto", minWidth: 0 }}>
+            <div style={{ background: "rgba(255,255,255,0.7)", borderRadius: 14, padding: 14, textAlign: "center" }}>
+              <div style={{ fontSize: 50, marginBottom: 4 }}>{ch.emoji}</div>
+              <h3 style={{ margin: "0 0 2px", color: "#3a5a2a", fontSize: 16 }}>{ch.name}</h3>
+              <p style={{ margin: 0, color: "#6a8a5a", fontSize: 11 }}>{ch.desc}</p>
+              {nu && (
+                <div style={{ marginTop: 10, padding: 10, background: canAfford(houseLevel + 1) ? "#fff8e8" : "#f5f5f5", borderRadius: 10, border: canAfford(houseLevel + 1) ? "2px solid #ffcc44" : "2px solid #ddd" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#886622" }}>Next: {nu.emoji} {nu.name}</div>
+                  <div style={{ fontSize: 10, color: "#888", margin: "3px 0" }}>Cost: {"\u{1F955}"}{nu.cost} {Object.entries(nu.mats).map(([k, v]) => `${{ wood: "\u{1FAB5}", vine: "\u{1F33F}", cloth: "\u{1F9F6}", leaf: "\u{1F343}" }[k]}${v}`).join(" ")}</div>
+                  <div style={{ fontSize: 10, color: "#44aa44", fontWeight: 600, marginBottom: 6 }}>Unlocks: {nu.benefit}</div>
+                  <button onClick={() => buyUpgrade(houseLevel + 1)} disabled={!canAfford(houseLevel + 1)} style={{ padding: "5px 18px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", background: canAfford(houseLevel + 1) ? "linear-gradient(135deg,#ffaa33,#ff8811)" : "#ccc", color: "#fff", border: "none", borderRadius: 14, cursor: canAfford(houseLevel + 1) ? "pointer" : "default", opacity: canAfford(houseLevel + 1) ? 1 : 0.5 }}>{"\u{1F9F1}"} Build!</button>
+                </div>
+              )}
+              <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center" }}>
+                {abilities.doubleJump && <span style={{ background: "#e8f0ff", padding: "2px 6px", borderRadius: 8, fontSize: 10 }}>{"\u2B06\uFE0F"} Dbl Jump</span>}
+                {abilities.fastClimb && <span style={{ background: "#e8ffe8", padding: "2px 6px", borderRadius: 8, fontSize: 10 }}>{"\u{1F9D7}"} Fast Climb</span>}
+                {abilities.gardenBonus && <span style={{ background: "#fff8e0", padding: "2px 6px", borderRadius: 8, fontSize: 10 }}>{"\u{1F331}"} Garden</span>}
+                {abilities.branchDash && <span style={{ background: "#ffe8f0", padding: "2px 6px", borderRadius: 8, fontSize: 10 }}>{"\u{1F4A8}"} Dash</span>}
+              </div>
+            </div>
+            <button onClick={() => { stopMusic(); setScreen("build"); }} style={{ padding: "8px", fontSize: 13, fontWeight: 600, fontFamily: "inherit", background: "linear-gradient(135deg,#ff6688,#ff4466)", color: "#fff", border: "none", borderRadius: 12, cursor: "pointer" }}>{"\u{1F9F1}"} Build & Decorate</button>
+            <button onClick={() => setScreen("outfits")} style={{ padding: "8px", fontSize: 13, fontWeight: 600, fontFamily: "inherit", background: "linear-gradient(135deg,#aa66ff,#8844dd)", color: "#fff", border: "none", borderRadius: 12, cursor: "pointer" }}>{"\u{1F457}"} Wardrobe ({ownedOutfits.length}/{OUTFITS.length})</button>
+          </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, overflow: "auto", minWidth: 0 }}>
+            <h3 style={{ margin: 0, color: "#3a5a2a", fontSize: 15 }}>{"\u{1F5FA}\uFE0F"} Levels</h3>
+            {BIOMES.map((biome, i) => (
+              <button key={i} onClick={() => startLevel(i)} style={{ padding: "8px 12px", background: "rgba(255,255,255,0.8)", border: "2px solid rgba(0,0,0,0.06)", borderRadius: 10, cursor: "pointer", textAlign: "left", fontFamily: "inherit", transition: "all 0.2s", display: "flex", alignItems: "center", gap: 8 }}
+                onMouseOver={e => { e.currentTarget.style.transform = "translateX(4px)"; e.currentTarget.style.borderColor = "#ff8844"; }}
+                onMouseOut={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.borderColor = "rgba(0,0,0,0.06)"; }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: `linear-gradient(135deg,${biome.sky},${biome.bg})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{["\u{1F338}", "\u{1F332}", "\u{1F343}", "\u{1F4A7}", "\u{1F319}"][i]}</div>
+                <div><div style={{ fontWeight: 600, color: "#3a5a2a", fontSize: 13 }}>{biome.name}</div><div style={{ fontSize: 10, color: "#8a9a7a" }}>{biome.desc} {goldenFound.includes(i) && "\u2B50"}</div></div>
+              </button>
+            ))}
+            {collectedFurniture.length > 0 && (
+              <div style={{ background: "rgba(255,255,255,0.7)", borderRadius: 10, padding: 8, marginTop: 2 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#6a4a8a", marginBottom: 4 }}>{"\u{1FA91}"} Furniture ({collectedFurniture.length})</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{collectedFurniture.map((f, i) => <span key={i} title={f.name} style={{ fontSize: 16, padding: 1, background: f.rarity === "legendary" ? "#fff8e0" : f.rarity === "rare" ? "#f0e8ff" : "#f0f0f0", borderRadius: 4 }}>{f.emoji}</span>)}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // === OUTFITS ===
+  if (screen === "outfits") return (
+    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", background: "linear-gradient(180deg,#f0e8ff,#e0d0f0)", fontFamily: ff, overflow: "auto" }}>
+      {linkEl}
+      <div style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h2 style={{ margin: 0, color: "#5a3a8a", fontSize: 20 }}>{"\u{1F457}"} Wardrobe</h2>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ background: "#fff3e0", padding: "4px 10px", borderRadius: 16, fontWeight: 600, color: "#cc6600", fontSize: 12 }}>{"\u{1F955}"} {totalCarrots}</span>
+          <button onClick={() => { setScreen("hub"); if (musicOn) startHubMusic(); }} style={{ padding: "5px 14px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", background: "#fff", border: "2px solid #ddd", borderRadius: 14, cursor: "pointer" }}>{"\u2190"} Back</button>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 10, padding: "0 16px 16px" }}>
+        {OUTFITS.map((o, i) => {
+          const owned = ownedOutfits.includes(i), eq = currentOutfit === i, canBuy = totalCarrots >= o.price;
+          return (
+            <div key={o.id} style={{ background: eq ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.7)", borderRadius: 12, padding: 14, textAlign: "center", border: eq ? "3px solid #aa66ff" : "3px solid transparent" }}>
+              <canvas ref={el => { if (!el) return; const c = el.getContext("2d"); c.clearRect(0, 0, 60, 70); drawBunny(c, 30, 45, 1, 0, false, false, o); }} width={60} height={70} style={{ width: 60, height: 70, margin: "0 auto 6px", display: "block" }} />
+              <div style={{ fontWeight: 600, color: "#3a3a5a", fontSize: 13 }}>{o.name}</div>
+              {eq && <div style={{ fontSize: 10, color: "#aa66ff", fontWeight: 600, marginTop: 3 }}>{"\u2713"} Equipped</div>}
+              {owned && !eq && <button onClick={() => setCurrentOutfit(i)} style={{ marginTop: 4, padding: "3px 14px", fontSize: 11, fontWeight: 600, fontFamily: "inherit", background: "linear-gradient(135deg,#aa66ff,#8844dd)", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer" }}>Equip</button>}
+              {!owned && <button onClick={() => { if (!canBuy) return; setTotalCarrots(c => c - o.price); setOwnedOutfits(p => [...p, i]); setCurrentOutfit(i); playSFX("build"); }} disabled={!canBuy} style={{ marginTop: 4, padding: "3px 14px", fontSize: 11, fontWeight: 600, fontFamily: "inherit", background: canBuy ? "linear-gradient(135deg,#ffaa33,#ff8811)" : "#ccc", color: "#fff", border: "none", borderRadius: 10, cursor: canBuy ? "pointer" : "default", opacity: canBuy ? 1 : 0.5 }}>{"\u{1F955}"} {o.price}</button>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // === LEGO BUILD ===
+  if (screen === "build") return <LegoBuild houseLevel={houseLevel} collectedFurniture={collectedFurniture} placedFurniture={placedFurniture} setPlacedFurniture={setPlacedFurniture} onBack={() => { setScreen("hub"); if (musicOn) startHubMusic(); }} />;
+
+  // === GAME SCREEN ===
+  if (screen === "game") return (
+    <div style={{ width: "100%", height: "100vh", position: "relative", background: "#000", overflow: "hidden" }}>
+      {linkEl}
+      <canvas ref={canvasRef} width={800} height={500} style={{ width: "100%", height: "100%", display: "block" }} />
+      <div style={{ position: "absolute", top: 8, left: 8, right: 8, display: "flex", justifyContent: "space-between", pointerEvents: "none", fontFamily: ff }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <div style={{ background: "rgba(0,0,0,0.5)", padding: "4px 10px", borderRadius: 14, color: "#fff", fontWeight: 600, fontSize: 13 }}>{"\u{1F955}"} {levelCarrots}/{levelMax}</div>
+          <div style={{ background: "rgba(0,0,0,0.5)", padding: "4px 10px", borderRadius: 14, color: "#fff", fontSize: 13 }}>{"\u2764\uFE0F".repeat(hearts)}{"\u{1F5A4}".repeat(maxHearts - hearts)}</div>
+          {flyMode && <div style={{ background: "rgba(100,150,255,0.5)", padding: "4px 10px", borderRadius: 14, color: "#fff", fontSize: 11 }}>{"\u{1FABD}"} F=fly</div>}
+        </div>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <div style={{ background: "rgba(0,0,0,0.5)", padding: "4px 10px", borderRadius: 14, color: "#ffcc88", fontWeight: 600, fontSize: 11 }}>{BIOMES[currentBiome].name}</div>
+          <button onClick={toggleMusic} style={{ background: "rgba(0,0,0,0.5)", padding: "4px 8px", borderRadius: 14, color: "#fff", border: "none", cursor: "pointer", fontSize: 11, pointerEvents: "auto" }}>{musicOn ? "\u{1F50A}" : "\u{1F507}"}</button>
+          <button onClick={() => { stopMusic(); setScreen("hub"); if (musicOn) startHubMusic(); }} style={{ background: "rgba(0,0,0,0.5)", padding: "4px 10px", borderRadius: 14, color: "#fff", border: "none", cursor: "pointer", fontSize: 11, fontFamily: "inherit", pointerEvents: "auto" }}>{"\u{1F3E0}"}</button>
+        </div>
+      </div>
+      {showMessage && <div style={{ position: "absolute", top: "38%", left: "50%", transform: "translate(-50%,-50%)", background: "rgba(255,200,0,0.9)", padding: "8px 20px", borderRadius: 16, color: "#553300", fontWeight: 700, fontSize: 15, fontFamily: ff }}>{showMessage}</div>}
+      <div style={{ position: "absolute", bottom: 12, left: 12, right: 12, display: "flex", justifyContent: "space-between", pointerEvents: "none" }}>
+        <div style={{ display: "flex", gap: 5, pointerEvents: "auto" }}>
+          <button onPointerDown={() => keysRef.current["ArrowLeft"] = true} onPointerUp={() => keysRef.current["ArrowLeft"] = false} onPointerLeave={() => keysRef.current["ArrowLeft"] = false} style={mobileBtn}>{"\u25C0"}</button>
+          <button onPointerDown={() => keysRef.current["ArrowRight"] = true} onPointerUp={() => keysRef.current["ArrowRight"] = false} onPointerLeave={() => keysRef.current["ArrowRight"] = false} style={mobileBtn}>{"\u25B6"}</button>
+        </div>
+        <div style={{ display: "flex", gap: 5, pointerEvents: "auto" }}>
+          {flyMode && <button onPointerDown={() => keysRef.current["f"] = true} onPointerUp={() => keysRef.current["f"] = false} onPointerLeave={() => keysRef.current["f"] = false} style={{ ...mobileBtn, background: "rgba(100,180,255,0.4)", borderColor: "rgba(100,180,255,0.6)" }}>{"\u{1FABD}"}</button>}
+          <button onPointerDown={() => keysRef.current["ArrowDown"] = true} onPointerUp={() => keysRef.current["ArrowDown"] = false} onPointerLeave={() => keysRef.current["ArrowDown"] = false} style={mobileBtn}>{"\u25BC"}</button>
+          <button onPointerDown={() => { keysRef.current[" "] = true; keysRef.current["ArrowUp"] = true; }} onPointerUp={() => { keysRef.current[" "] = false; keysRef.current["ArrowUp"] = false; }} onPointerLeave={() => { keysRef.current[" "] = false; keysRef.current["ArrowUp"] = false; }} style={{ ...mobileBtn, width: 52 }}>{"\u2B06"}</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // === LEVEL COMPLETE ===
+  if (screen === "levelcomplete") return (
+    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg,#fff8e0,#ffe8b0)", fontFamily: ff }}>
+      {linkEl}
+      <div style={{ fontSize: 56 }}>{"\u{1F389}"}</div>
+      <h2 style={{ color: "#886622", fontSize: 26, margin: "4px 0" }}>Level Complete!</h2>
+      <p style={{ color: "#aa8844", fontSize: 13, margin: "0 0 14px" }}>{BIOMES[currentBiome].name}</p>
+      <div style={{ background: "rgba(255,255,255,0.7)", borderRadius: 12, padding: "10px 24px", marginBottom: 16, textAlign: "center" }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#cc6600" }}>{"\u{1F955}"} {levelCarrots} carrots</div>
+        <div style={{ fontSize: 12, color: "#888" }}>Total: {"\u{1F955}"} {totalCarrots}</div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={() => { setScreen("hub"); if (musicOn) startHubMusic(); }} style={{ padding: "8px 24px", fontSize: 14, fontWeight: 600, fontFamily: "inherit", background: "linear-gradient(135deg,#88cc44,#66aa22)", color: "#fff", border: "none", borderRadius: 20, cursor: "pointer" }}>{"\u{1F3E0}"} Home</button>
+        {currentBiome < BIOMES.length - 1 && <button onClick={() => startLevel(currentBiome + 1)} style={{ padding: "8px 24px", fontSize: 14, fontWeight: 600, fontFamily: "inherit", background: "linear-gradient(135deg,#ff8844,#ff6622)", color: "#fff", border: "none", borderRadius: 20, cursor: "pointer" }}>Next {"\u27A1\uFE0F"}</button>}
+      </div>
+    </div>
+  );
+
+  // === GAME OVER ===
+  if (screen === "gameover") return (
+    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg,#ffe8e8,#ffcccc)", fontFamily: ff }}>
+      {linkEl}
+      <div style={{ fontSize: 56 }}>{"\u{1F635}"}</div>
+      <h2 style={{ color: "#884444", fontSize: 22, margin: "4px 0" }}>Oh no!</h2>
+      <p style={{ color: "#aa6666", fontSize: 12, marginBottom: 16 }}>You kept {"\u{1F955}"} {levelCarrots} carrots!</p>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={() => startLevel(currentBiome)} style={{ padding: "8px 24px", fontSize: 14, fontWeight: 600, fontFamily: "inherit", background: "linear-gradient(135deg,#ff8844,#ff6622)", color: "#fff", border: "none", borderRadius: 20, cursor: "pointer" }}>{"\u{1F504}"} Retry</button>
+        <button onClick={() => { setScreen("hub"); if (musicOn) startHubMusic(); }} style={{ padding: "8px 24px", fontSize: 14, fontWeight: 600, fontFamily: "inherit", background: "linear-gradient(135deg,#88cc44,#66aa22)", color: "#fff", border: "none", borderRadius: 20, cursor: "pointer" }}>{"\u{1F3E0}"} Home</button>
+      </div>
+    </div>
+  );
+
+  return null;
+}
+
+// === LEGO BUILD MINIGAME ===
+function LegoBuild({ houseLevel, collectedFurniture, placedFurniture, setPlacedFurniture, onBack }) {
+  const canvasRef = useRef(null);
+  const [pieces, setPieces] = useState([]);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOff, setDragOff] = useState({ x: 0, y: 0 });
+  const [placed, setPlaced] = useState([]);
+  const [selFurn, setSelFurn] = useState(null);
+  const [done, setDone] = useState(false);
+  const G = 32;
+
+  useEffect(() => {
+    const all = [];
+    const stages = ["foundation", "walls", "roof"];
+    if (houseLevel >= 2) stages.push("cottage");
+    if (houseLevel >= 5) stages.push("treehouse");
+    // Layout pieces in a tray grid below the build area
+    const TRAY_TOP = 360;
+    const TRAY_LEFT = 10;
+    const TRAY_WIDTH = 450;
+    const ROW_H = G + 12;
+    let curX = TRAY_LEFT;
+    let curY = TRAY_TOP;
+    stages.forEach(stage => {
+      (LEGO_PIECES[stage] || []).forEach((p, i) => {
+        const pw = p.w * G;
+        // Wrap to next row if this piece won't fit
+        if (curX + pw > TRAY_LEFT + TRAY_WIDTH) {
+          curX = TRAY_LEFT;
+          curY += ROW_H;
+        }
+        all.push({ ...p, id: `${stage}-${i}`, targetX: p.x * G + 2.5 * G, targetY: p.y * G + G * 1.5, currentX: curX, currentY: curY, snapped: false });
+        curX += pw + 10;
+      });
+    });
+    setPieces(all);
+    setPlaced(placedFurniture.map(f => ({ ...f })));
+  }, [houseLevel, placedFurniture]);
+
+  const getPos = (e) => {
+    const r = canvasRef.current.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (canvasRef.current.width / r.width), y: (e.clientY - r.top) * (canvasRef.current.height / r.height) };
+  };
+
+  const onDown = (e) => {
+    const { x: mx, y: my } = getPos(e);
+    if (selFurn !== null) {
+      const fi = collectedFurniture[selFurn];
+      setPlaced(p => [...p, { ...fi, gx: Math.round((mx - G) / G), gy: Math.round((my - G) / G) }]);
+      setPlacedFurniture(p => [...p, { ...fi, gx: Math.round((mx - G) / G), gy: Math.round((my - G) / G) }]);
+      setSelFurn(null); playSFX("snap"); return;
+    }
+    for (let i = pieces.length - 1; i >= 0; i--) {
+      const p = pieces[i]; if (p.snapped) continue;
+      if (mx >= p.currentX && mx <= p.currentX + p.w * G && my >= p.currentY && my <= p.currentY + p.h * G) {
+        setDragIdx(i); setDragOff({ x: mx - p.currentX, y: my - p.currentY }); return;
+      }
+    }
+  };
+
+  const onMove = (e) => {
+    if (dragIdx === null) return;
+    const { x: mx, y: my } = getPos(e);
+    setPieces(p => { const n = [...p]; n[dragIdx] = { ...n[dragIdx], currentX: mx - dragOff.x, currentY: my - dragOff.y }; return n; });
+  };
+
+  const onUp = () => {
+    if (dragIdx === null) return;
+    setPieces(p => {
+      const n = [...p]; const pc = n[dragIdx];
+      if (Math.hypot(pc.currentX - pc.targetX, pc.currentY - pc.targetY) < G * 1.5) {
+        n[dragIdx] = { ...pc, currentX: pc.targetX, currentY: pc.targetY, snapped: true };
+        playSFX("snap");
+        setTimeout(() => { if (n.every(pp => pp.snapped)) setDone(true); }, 200);
+      }
+      return n;
+    });
+    setDragIdx(null);
+  };
+
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext("2d");
+    let raf, frame = 0;
+    const draw = () => {
+      frame++;
+      const W = c.width, H = c.height;
+      const gr = ctx.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, "#f8f0e0"); gr.addColorStop(1, "#e8d8c0");
+      ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+
+      // Build area outline
+      ctx.strokeStyle = "rgba(0,0,0,0.08)"; ctx.lineWidth = 1;
+      ctx.strokeRect(G * 2.5, G * 1.5, G * 8, G * 9);
+
+      // Ghost targets
+      for (const p of pieces) { if (p.snapped) continue; ctx.fillStyle = "rgba(0,0,0,0.05)"; ctx.setLineDash([4, 4]); ctx.strokeStyle = "rgba(0,0,0,0.15)"; ctx.beginPath(); ctx.roundRect(p.targetX, p.targetY, p.w * G, p.h * G, 3); ctx.fill(); ctx.stroke(); ctx.setLineDash([]); }
+
+      // Placed furniture
+      for (const f of placed) { ctx.font = `${Math.min(f.w, f.h) * G * 0.6}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(f.emoji, f.gx * G + G * 2.5 + (f.w * G) / 2, f.gy * G + G * 1.5 + (f.h * G) / 2); }
+
+      // Pieces
+      for (const p of pieces) {
+        const x = p.currentX, y = p.currentY, w = p.w * G, h = p.h * G;
+        // Shadow
+        if (!p.snapped) { ctx.fillStyle = "rgba(0,0,0,0.1)"; ctx.beginPath(); ctx.roundRect(x + 3, y + 3, w, h, 4); ctx.fill(); }
+        // Body
+        ctx.fillStyle = p.color; ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.fill(); ctx.stroke();
+        // Studs
+        ctx.fillStyle = "rgba(255,255,255,0.25)";
+        for (let sx = 0; sx < p.w; sx++) for (let sy = 0; sy < p.h; sy++) { ctx.beginPath(); ctx.arc(x + sx * G + G / 2, y + sy * G + G / 2, 5, 0, Math.PI * 2); ctx.fill(); }
+        // Highlight
+        ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(x + 2, y + 2, w - 4, h / 3);
+        // Snap glow
+        if (p.snapped) { ctx.strokeStyle = "rgba(100,255,100,0.4)"; ctx.lineWidth = 3; ctx.strokeRect(x - 1, y - 1, w + 2, h + 2); }
+        // Label
+        ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.font = "bold 8px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(p.type, x + w / 2, y + h / 2);
+      }
+
+      // Tray separator
+      ctx.strokeStyle = "rgba(0,0,0,0.12)"; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(8, 350); ctx.lineTo(W - 8, 350); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left";
+      ctx.fillText("\u{1F9F1} PIECES TRAY \u2014 drag to build area above", 12, 346);
+
+      // Tray label
+      ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("Drag Lego bricks to the outlined positions above!", W / 2, H - 10);
+      if (selFurn !== null) { ctx.fillStyle = "#8844cc"; ctx.fillText(`Click grid to place ${collectedFurniture[selFurn].name}`, W / 2, H - 26); }
+      if (done) {
+        ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.fillRect(0, H / 2 - 30, W, 60);
+        ctx.fillStyle = "#44aa44"; ctx.font = "bold 22px 'Fredoka',sans-serif"; ctx.fillText("\u{1F389} House Complete!", W / 2, H / 2 + 6);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [pieces, placed, selFurn, done, collectedFurniture]);
+
+  return (
+    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", background: "linear-gradient(180deg,#fff0e0,#ffe0c0)", fontFamily: "'Fredoka','Nunito',sans-serif", overflow: "hidden" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet" />
+      <div style={{ padding: "8px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+        <h2 style={{ margin: 0, color: "#884422", fontSize: 18 }}>{"\u{1F9F1}"} Build Floppy's Home</h2>
+        <button onClick={onBack} style={{ padding: "4px 12px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", background: "#fff", border: "2px solid #ddd", borderRadius: 12, cursor: "pointer" }}>{"\u2190"} Back</button>
+      </div>
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        <canvas ref={canvasRef} width={480} height={560} style={{ flex: 1, cursor: dragIdx !== null ? "grabbing" : "grab", touchAction: "none" }}
+          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} />
+        <div style={{ width: 140, background: "rgba(255,255,255,0.8)", padding: 8, overflow: "auto", borderLeft: "2px solid rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#6a4a8a", marginBottom: 6 }}>{"\u{1FA91}"} Furniture</div>
+          {collectedFurniture.length === 0 && <div style={{ fontSize: 10, color: "#aaa" }}>Find items in levels!</div>}
+          {collectedFurniture.map((f, i) => (
+            <button key={i} onClick={() => setSelFurn(selFurn === i ? null : i)}
+              style={{ width: "100%", padding: 6, marginBottom: 3, background: selFurn === i ? "#ffe0ff" : "#fff", border: selFurn === i ? "2px solid #aa66ff" : "2px solid #eee", borderRadius: 6, cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 16 }}>{f.emoji}</span>
+              <span style={{ fontWeight: 600, color: "#444" }}>{f.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const mobileBtn = {
+  width: 42, height: 42, borderRadius: "50%",
+  background: "rgba(255,255,255,0.3)", border: "2px solid rgba(255,255,255,0.5)",
+  color: "#fff", fontSize: 15, cursor: "pointer", display: "flex",
+  alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)",
+  touchAction: "none", userSelect: "none", WebkitUserSelect: "none",
+};
+
+ReactDOM.render(React.createElement(FloppyExplores), document.getElementById('root'));
+</script>
+</body>
+</html>
